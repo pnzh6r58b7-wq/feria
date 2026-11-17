@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #F3EEE5;
+  --card: #FBF8F2;
+  --ink: #18213A;
+  --mut: #706B61;
+  --line: #E3DACB;
+  --shadow: 0 1px 2px rgba(24, 33, 58, .05), 0 8px 24px -14px rgba(24, 33, 58, .18);
+  --teal: #1E6E69;
+  --teal-s: #DCEBE7;
+  --terra: #BF5530;
+  --terra-s: #F6E1D6;
+  --amber: #B07A12;
+  --amber-s: #F4E7CA;
+  --cu: #3B8877;
+  --cu-s: #DAEDE6;
+  --wine: #7A2B3A;
+  --wine-s: #F0DCDF;
+  --navy: #22325C;
+  --navy-s: #DEE3EF;
+  --del: #C93A32;
+}
+
+[data-theme="dark"] {
+  --bg: #0E1424;
+  --card: #161E33;
+  --ink: #ECE5D6;
+  --mut: #9C9585;
+  --line: #27324F;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 30px -16px rgba(0, 0, 0, .6);
+  --teal: #62BAB0;
+  --teal-s: #163331;
+  --terra: #E68B64;
+  --terra-s: #3B2319;
+  --amber: #E3B457;
+  --amber-s: #382C14;
+  --cu: #79C4B1;
+  --cu-s: #17312C;
+  --wine: #DA7B8C;
+  --wine-s: #3B1D26;
+  --navy: #A3B5E2;
+  --navy-s: #1E2A48;
+  --del: #D9473F;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  transition: background .25s, color .25s;
+}
+
+body {
+  font-family: var(--font-manrope), system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.num {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: -.01em;
+}
