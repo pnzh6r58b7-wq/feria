@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -10,6 +10,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Si ya hay sesión, pásalo directo a inicio.
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) router.replace("/");
+    });
+  }, [router]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -30,12 +38,9 @@ export default function LoginPage() {
         setLoading(false);
         return;
       }
-      router.push("/");
-      router.refresh();
+      router.replace("/");
     } catch {
-      setError(
-        "No se pudo conectar con el servidor. Falta configurar Supabase."
-      );
+      setError("No se pudo conectar con el servidor. Inténtalo de nuevo.");
       setLoading(false);
     }
   }

@@ -1,18 +1,34 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import HomeShell from "@/components/HomeShell";
 
-export default async function Home() {
-  const supabase = await createClient();
+export default function Home() {
+  const router = useRouter();
+  const [email, setEmail] = useState<string | null>(null);
+  const [checking, setChecking] = useState(true);
 
-  let email: string | null = null;
-  try {
-    const { data } = await supabase.auth.getUser();
-    if (!data.user) redirect("/login");
-    email = data.user.email ?? null;
-  } catch {
-    // Error de red (p.ej. Supabase aún sin configurar): lo trata el middleware.
-    redirect("/login");
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data }) => {
+      const user = data.session?.user;
+      if (!user) {
+        router.replace("/login");
+        return;
+      }
+      setEmail(user.email ?? "");
+      setChecking(false);
+    });
+  }, [router]);
+
+  if (checking) {
+    return (
+      <main className="min-h-dvh grid place-items-center">
+        <span className="text-mut text-sm">Cargando…</span>
+      </main>
+    );
   }
 
   return <HomeShell email={email ?? ""} />;

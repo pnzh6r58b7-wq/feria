@@ -19,7 +19,7 @@ const fraunces = Fraunces({
 export const metadata: Metadata = {
   title: "Feria",
   description: "Control semanal de gastos de Israel",
-  manifest: "/manifest.webmanifest",
+  manifest: "/feria/manifest.webmanifest",
   applicationName: "Feria",
   appleWebApp: {
     capable: true,
@@ -28,10 +28,12 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/feria/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/feria/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
-    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    apple: [
+      { url: "/feria/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
   },
 };
 

@@ -56,8 +56,7 @@ export default function HomeShell({ email }: { email: string }) {
     } catch {
       /* ignore */
     }
-    router.push("/login");
-    router.refresh();
+    router.replace("/login");
   }
 
   return (
