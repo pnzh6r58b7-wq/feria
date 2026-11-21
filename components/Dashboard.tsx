@@ -13,9 +13,15 @@ import {
 } from "@/lib/model";
 import {
   buildAll, stats, totals, metaEmerg, msiSummary, porCobrar, usdWallet, weekCalc,
-  planInfo, pagoDe, monthEnd,
+  planInfo, schedule, firstCorte, pagoDe, monthEnd,
 } from "@/lib/calc";
-import { fetchMovs, fetchPlans, fetchReglas, insertMov, updateMov, deleteMov } from "@/lib/db";
+import {
+  fetchMovs, fetchPlans, fetchReglas, insertMov, updateMov, deleteMov,
+  insertPlan, updatePlan, deletePlan, saveReglas, borrarTodo,
+} from "@/lib/db";
+import type { Pago } from "@/lib/model";
+import Ring from "@/components/Ring";
+import { PlanSheet, PlanEditSheet, RulesSheet, CajitaSheet, exportData } from "@/components/sheets";
 
 type Fx = { rate: number; live: boolean };
 type Toast = { text: string; actLabel?: string; onAct?: () => void };
@@ -23,20 +29,6 @@ const vv = (c: string) => `var(${c})`;
 const vs = (c: string) => `var(${c}-s)`;
 const sortMovs = (a: Mov[]) =>
   [...a].sort((x, y) => y.fecha.localeCompare(x.fecha) || (y._created || "").localeCompare(x._created || ""));
-
-function Ring({ frac, color }: { frac: number; color: string }) {
-  const C = 2 * Math.PI * 18;
-  return (
-    <svg className="ring" viewBox="0 0 44 44">
-      <circle cx="22" cy="22" r="18" fill="none" stroke="var(--line)" strokeWidth="4" />
-      <circle cx="22" cy="22" r="18" fill="none" stroke={`var(${color})`} strokeWidth="4" strokeLinecap="round"
-        strokeDasharray={`${C * frac} ${C}`} transform="rotate(-90 22 22)" />
-      <text x="22" y="26" textAnchor="middle" fontSize="11" fontWeight="800" fill={`var(${color})`} fontFamily="Manrope">
-        {Math.round(frac * 100)}%
-      </text>
-    </svg>
-  );
-}
 
 export default function Dashboard({ email }: { email: string }) {
   const router = useRouter();
@@ -52,9 +44,14 @@ export default function Dashboard({ email }: { email: string }) {
   const [filter, setFilter] = useState("todo");
   const [sheet, setSheet] = useState<{ initial: Mov | null; pre?: Record<string, unknown> } | null>(null);
   const [fxOpen, setFxOpen] = useState(false);
+  const [planId, setPlanId] = useState<string | null>(null);
+  const [planEditId, setPlanEditId] = useState<string | null>(null);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [cajitaOpen, setCajitaOpen] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const tt = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const taps = useRef({ n: 0, t: null as ReturnType<typeof setTimeout> | null });
 
   useEffect(() => {
     setTheme((document.documentElement.getAttribute("data-theme") as "light" | "dark") || "light");
@@ -148,16 +145,108 @@ export default function Dashboard({ email }: { email: string }) {
     } catch { showToast("No se pudo registrar el cambio."); }
   }
 
+  async function onPlan(p: Plan) {
+    try {
+      const saved = await insertPlan(p);
+      setPlans((prev) => [saved, ...prev]);
+      setSheet(null);
+      const f = firstCorte(saved.fecha, rules);
+      showToast(`${saved.meses} MSI de ${money2(saved.total / saved.meses)} · primer cargo ${fmtD(f)}`);
+    } catch { showToast("No se pudo crear el plan."); }
+  }
+  async function onPago(planIdArg: string, pago: Pago) {
+    const p = plans.find((x) => x.id === planIdArg);
+    if (!p) return;
+    const upd = { ...p, pagos: [...(p.pagos || []), pago] };
+    try {
+      const saved = await updatePlan(planIdArg, upd);
+      setPlans((prev) => prev.map((x) => (x.id === planIdArg ? saved : x)));
+      setSheet(null);
+      const i = planInfo(saved, rules, today);
+      showToast(i.active ? (pago.tipo === "capital" ? `Abonaste ${money2(pago.monto)} a capital` : `Pagaste ${money2(pago.monto)}`) : `Liquidaste ${saved.concepto} 🎉`);
+    } catch { showToast("No se pudo registrar el pago."); }
+  }
+  async function onDelPago(planIdArg: string, pj: number) {
+    const p = plans.find((x) => x.id === planIdArg);
+    if (!p) return;
+    const pagos = [...(p.pagos || [])];
+    const [x] = pagos.splice(pj, 1);
+    const upd = { ...p, pagos };
+    try {
+      const saved = await updatePlan(planIdArg, upd);
+      setPlans((prev) => prev.map((z) => (z.id === planIdArg ? saved : z)));
+      showToast(`Pago borrado: ${p.concepto}`, "Deshacer", async () => {
+        try {
+          const back = await updatePlan(planIdArg, { ...saved, pagos: [...saved.pagos, x] });
+          setPlans((prev) => prev.map((z) => (z.id === planIdArg ? back : z)));
+        } catch {}
+      });
+    } catch { showToast("No se pudo borrar el pago."); }
+  }
+  async function onDeletePlan(p: Plan) {
+    setPlanId(null);
+    setPlans((prev) => prev.filter((x) => x.id !== p.id));
+    try {
+      await deletePlan(p.id);
+      showToast(`Plan borrado: ${p.concepto}`);
+    } catch {
+      setPlans((prev) => [p, ...prev]);
+      showToast("No se pudo borrar el plan.");
+    }
+  }
+  async function onSavePlanEdit(id: string, patch: Partial<Plan>) {
+    const p = plans.find((x) => x.id === id);
+    if (!p) return;
+    const upd = { ...p, ...patch };
+    try {
+      const saved = await updatePlan(id, upd);
+      setPlans((prev) => prev.map((x) => (x.id === id ? saved : x)));
+      setPlanEditId(null);
+      showToast("Plan actualizado");
+    } catch { showToast("No se pudo guardar."); }
+  }
+  async function onSaveRules(r: Rules, manualFx?: number) {
+    setRules(r);
+    if (manualFx && !fx.live) setFx((f) => ({ ...f, rate: manualFx }));
+    try { await saveReglas(r); showToast("Reglas guardadas"); } catch { showToast("No se pudieron guardar las reglas."); }
+    setRulesOpen(false);
+  }
+  async function onBorrarTodo() {
+    const oldM = movs, oldP = plans;
+    setMovs([]); setPlans([]); setRulesOpen(false);
+    try {
+      await borrarTodo();
+      showToast("Se borró todo", "Deshacer", async () => {
+        try {
+          for (const m of oldM) await insertMov(m);
+          for (const p of oldP) await insertPlan(p);
+          const [m, pl] = await Promise.all([fetchMovs(), fetchPlans()]);
+          setMovs(sortMovs(m)); setPlans(pl);
+        } catch { showToast("No se pudo deshacer del todo."); }
+      });
+    } catch { setMovs(oldM); setPlans(oldP); showToast("No se pudo borrar."); }
+  }
+  function brandTap() {
+    const s = taps.current;
+    s.n++;
+    if (s.t) clearTimeout(s.t);
+    s.t = setTimeout(() => { s.n = 0; }, 600);
+    if (s.n >= 3) { s.n = 0; setCajitaOpen(true); }
+  }
+
   return (
     <div className="app">
       <header className="flex items-center justify-between mt-0.5 mb-3.5">
-        <div className="num font-bold text-[28px] leading-none tracking-tight">
+        <button className="num font-bold text-[28px] leading-none tracking-tight text-left" onClick={brandTap}>
           Feria
           <span className="block font-sans text-xs font-semibold text-mut tracking-normal mt-0.5">Tu mes de un vistazo</span>
-        </div>
+        </button>
         <div className="flex gap-1.5">
           <button className="ib" aria-label="Modo oscuro" onClick={toggleTheme}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>
+          </button>
+          <button className="ib" aria-label="Reglas" onClick={() => setRulesOpen(true)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12" /><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12" r="2" /><circle cx="18" cy="18" r="2" /></svg>
           </button>
           <button className="ib" aria-label="Cerrar sesión" onClick={logout} title={email}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M16 17l5-5-5-5M21 12H9M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /></svg>
@@ -182,7 +271,9 @@ export default function Dashboard({ email }: { email: string }) {
           ALL={ALL} plans={plans} rules={rules} today={today} rate={rate} ctab={ctab} setCtab={setCtab}
           onBack={() => setPanel("dash")}
           onCobrar={(p) => setSheet({ initial: null, pre: { t: "in", cat: "reemb_" + p } })}
-          onToast={showToast}
+          onNewMsi={() => setSheet({ initial: null, pre: { t: "out", msi: true } })}
+          onOpenPlan={(id) => setPlanId(id)}
+          onPayNext={(pid, falta) => setSheet({ initial: null, pre: { t: "out", cat: "pago_msi", planId: pid, amt: String(falta) } })}
         />
       ) : (
         <DashView
@@ -201,11 +292,30 @@ export default function Dashboard({ email }: { email: string }) {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
       </button>
 
-      <div className={`scrim${sheet || fxOpen ? " on" : ""}`} onClick={() => { setSheet(null); setFxOpen(false); }} />
+      <div className={`scrim${sheet || fxOpen || planId || planEditId || rulesOpen || cajitaOpen ? " on" : ""}`}
+        onClick={() => { setSheet(null); setFxOpen(false); setPlanId(null); setPlanEditId(null); setRulesOpen(false); setCajitaOpen(false); }} />
       {sheet && (
-        <AddSheet initial={sheet.initial} pre={sheet.pre as never} movs={movs} rules={rules} fx={fx} onClose={() => setSheet(null)} onSubmit={onSubmit} />
+        <AddSheet initial={sheet.initial} pre={sheet.pre as never} movs={movs} plans={plans} rules={rules} fx={fx}
+          pc={porCobrar(ALL, plans, rules, today, rate)} today={today}
+          onClose={() => setSheet(null)} onMov={onSubmit} onPlan={onPlan} onPago={onPago} onToast={showToast} />
       )}
       {fxOpen && <FxModal wallet={usdWallet(movs)} fx={fx} onCancel={() => setFxOpen(false)} onDone={doFx} />}
+      {planId && (() => {
+        const p = plans.find((x) => x.id === planId);
+        return p ? (
+          <PlanSheet p={p} rules={rules} today={today} onClose={() => setPlanId(null)}
+            onPay={(falta) => { setPlanId(null); setSheet({ initial: null, pre: { t: "out", cat: "pago_msi", planId: p.id, amt: String(falta) } }); }}
+            onCapital={() => { setPlanId(null); setSheet({ initial: null, pre: { t: "out", cat: "capital", planId: p.id } }); }}
+            onEdit={() => { setPlanEditId(p.id); setPlanId(null); }}
+            onDelete={() => onDeletePlan(p)} onDelPago={(pj) => onDelPago(p.id, pj)} />
+        ) : null;
+      })()}
+      {planEditId && (() => {
+        const p = plans.find((x) => x.id === planEditId);
+        return p ? <PlanEditSheet p={p} onClose={() => setPlanEditId(null)} onSave={(patch) => onSavePlanEdit(p.id, patch)} /> : null;
+      })()}
+      {rulesOpen && <RulesSheet rules={rules} fx={fx} onClose={() => setRulesOpen(false)} onSave={onSaveRules} onExport={() => exportData(movs, plans, rules)} onBorrar={onBorrarTodo} />}
+      {cajitaOpen && <CajitaSheet ALL={ALL} rules={rules} today={today} rate={rate} onClose={() => setCajitaOpen(false)} onUse={() => { setCajitaOpen(false); setSheet({ initial: null, pre: { t: "out", cat: "cajita", real: true } }); }} />}
 
       <div className={`toast${toast ? " on" : ""}`}>
         {toast && (
@@ -531,11 +641,12 @@ function MovsPanel({
 
 /* ===== panel Tarjeta (lectura) ===== */
 function CuentasPanel({
-  ALL, plans, rules, today, rate, ctab, setCtab, onBack, onCobrar, onToast,
+  ALL, plans, rules, today, rate, ctab, setCtab, onBack, onCobrar, onNewMsi, onOpenPlan, onPayNext,
 }: {
   ALL: Mov[]; plans: Plan[]; rules: Rules; today: string; rate: number;
   ctab: "msi" | "cobrar"; setCtab: (t: "msi" | "cobrar") => void;
-  onBack: () => void; onCobrar: (p: "mama" | "externo") => void; onToast: (t: string) => void;
+  onBack: () => void; onCobrar: (p: "mama" | "externo") => void;
+  onNewMsi: () => void; onOpenPlan: (id: string) => void; onPayNext: (pid: string, falta: number) => void;
 }) {
   const ms = msiSummary(plans, rules, today);
   const pc = porCobrar(ALL, plans, rules, today, rate);
@@ -552,21 +663,22 @@ function CuentasPanel({
             <div className="lbl">Próximo cargo</div>
             <div className="num" style={{ fontSize: 40, fontWeight: 600, margin: "4px 0" }}>{money2(ms.nextAmt)}</div>
             <div className="muted" style={{ fontSize: 13 }}>{ms.next ? <>{ms.vencida && <b style={{ color: "var(--del)" }}>Vencida · </b>}Corte {fmtDay(ms.next)} · pagas antes del {fmtDay(pagoDe(ms.next, rules))}</> : "No hay mensualidades pendientes"}</div>
+            {ms.next && <button className="btn sm" style={{ marginTop: 10 }} onClick={() => { const cu = ms.by[ms.next!][0]; onPayNext(cu.p.id, cu.falta); }}>Pagar mensualidad</button>}
             <div className="row" style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--line)" }}><span className="muted" style={{ fontWeight: 700, fontSize: 13 }}>Total que falta pagar</span><b className="num" style={{ fontSize: 18 }}>{money2(ms.left)}</b></div>
           </div>
           <div className="card">
-            <div className="row"><div className="lbl">Planes activos</div><button className="btn sm ghost" onClick={() => onToast("Crear compra a MSI: en el siguiente paso")}>+ Compra a MSI</button></div>
+            <div className="row"><div className="lbl">Planes activos</div><button className="btn sm ghost" onClick={onNewMsi}>+ Compra a MSI</button></div>
             {act.length ? act.map(({ p, i }) => { const c = CATS.out[p.cat]; return (
-              <div key={p.id} className="plan">
+              <button key={p.id} className="plan" onClick={() => onOpenPlan(p.id)}>
                 <Ring frac={i.frac} color={c.c} />
                 <div className="t"><b>{p.concepto}</b><small>{c.l} · {i.nPaid} de {p.meses} pagadas{i.next?.vencida ? " · vencida" : ""} · compra {fmtD(p.fecha)}</small></div>
                 <div className="a"><b>{money2(i.next ? i.next.falta : 0)}</b><small>faltan {money2(i.rem)}</small></div>
-              </div>
+              </button>
             ); }) : <div className="empty">Sin planes activos</div>}
           </div>
           {past.length > 0 && (
             <div className="card"><div className="lbl">Liquidados</div>{past.map(({ p, i }) => { const c = CATS.out[p.cat]; return (
-              <div key={p.id} className="plan"><Ring frac={i.frac} color={c.c} /><div className="t"><b>{p.concepto}</b><small>{c.l} · Liquidado · compra {fmtD(p.fecha)}</small></div><div className="a"><b>{money2(p.total)}</b><small>total</small></div></div>
+              <button key={p.id} className="plan" onClick={() => onOpenPlan(p.id)}><Ring frac={i.frac} color={c.c} /><div className="t"><b>{p.concepto}</b><small>{c.l} · Liquidado · compra {fmtD(p.fecha)}</small></div><div className="a"><b>{money2(p.total)}</b><small>total</small></div></button>
             ); })}</div>
           )}
           <div className="muted" style={{ fontSize: 12, textAlign: "center" }}>Corte el {rules.corte} · pago límite el {rules.pagoDia}</div>
