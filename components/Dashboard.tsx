@@ -398,6 +398,8 @@ function DashView({
   const ult = ALL.filter((m) => m.fecha.startsWith(mo)).sort((a, b) => b.fecha.localeCompare(a.fecha) || (b._created || "").localeCompare(a._created || "")).slice(0, 6);
   const comDiff = prev.comida ? st.comida / prev.comida - 1 : null;
   const faltaInv = Math.max(0, T.invProj - T.invEf);
+  const invDone = T.invProj > 0 && faltaInv <= 0.5;
+  const emDone = T.emProj > 0 && T.emEf >= T.emProj - 0.5;
 
   return (
     <>
@@ -469,14 +471,16 @@ function DashView({
         </button>
 
         {/* Invertir */}
-        <div className="tile">
+        <div className={`tile${invDone ? " ok" : ""}`}>
+          {invDone && <span className="chk">✓</span>}
           <div className="lbl">Invertir</div>
           <div className="ringrow"><Ring frac={T.invProj ? Math.min(1, T.invEf / T.invProj) : 0} color="--amber" /><div><div className="n">{money(T.invEf)}</div><div className="s">de {money(T.invProj)} proyectado</div></div></div>
-          <div className="s">{faltaInv > 0 ? `Te faltan ${money(faltaInv)} por invertir` : "Al corriente ✓"}</div>
+          <div className="s">{faltaInv > 0.5 ? `Te faltan ${money(faltaInv)} por invertir` : "Al corriente ✓"}</div>
         </div>
 
         {/* Emergencia */}
-        <div className="tile">
+        <div className={`tile${emDone ? " ok" : ""}`}>
+          {emDone && <span className="chk">✓</span>}
           <div className="lbl">Emergencia</div>
           <div className="ringrow"><Ring frac={ME.meta > 0 ? Math.min(1, T.emEf / ME.meta) : 0} color="--cu" /><div><div className="n">{money(T.emEf)}</div><div className="s">{ME.meta > 0 ? `meta ${money(ME.meta)}` : "meta: aún sin gastos"}</div></div></div>
           <div className="s">Proyectado {money(T.emProj)} · 6 meses de gastos</div>

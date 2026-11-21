@@ -31,6 +31,7 @@ export function genMovs(plans: Plan[]): Mov[] {
         fecha: x.fecha,
         concepto: `${x.tipo === "capital" ? "Pago a capital" : "Pago MSI"} · ${p.concepto}`,
         real: p.real,
+        _created: `${x.fecha}T23:59:${String(50 + Math.min(9, j)).padStart(2, "0")}`,
       })
     )
   );

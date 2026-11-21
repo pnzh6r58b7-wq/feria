@@ -1,0 +1,22 @@
+name: Keep-alive Supabase
+
+# Supabase gratis se pausa tras 7 días sin actividad.
+# Este robotito le hace una consulta mínima cada día para mantenerlo despierto.
+on:
+  schedule:
+    - cron: "17 9 * * *" # diario ~9:17 UTC
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping a Supabase
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "apikey: sb_publishable_agrWbrtq-34GzSGwSyXGcQ_JUaiWw4C" \
+            -H "Authorization: Bearer sb_publishable_agrWbrtq-34GzSGwSyXGcQ_JUaiWw4C" \
+            -H "Accept-Profile: gastos" \
+            "https://fksoxhxlbwhlsmtumvpo.supabase.co/rest/v1/reglas?select=user_id&limit=1")
+          echo "HTTP $code"
+          test "$code" = "200"
