@@ -220,9 +220,8 @@ button.tile { width: 100%; }
 .wkc small { font-size: 10px; color: var(--mut); font-weight: 700; white-space: nowrap; }
 .wkc.now small { color: var(--ink); }
 .ringrow { display: flex; align-items: center; gap: 12px; }
-.ringrow .ring { width: 58px; height: 58px; }
-.ring { width: 44px; height: 44px; flex: none; outline: none; }
-.ring:focus, .ring:focus-visible, .ringrow svg:focus { outline: none; }
+.ringrow .ringsvg { width: 58px; height: 58px; }
+.ringsvg { width: 44px; height: 44px; flex: none; }
 .mini { display: flex; flex-direction: column; gap: 6px; }
 .mini .r { display: flex; align-items: center; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
 .mini .r:last-child { border-bottom: 0; }
