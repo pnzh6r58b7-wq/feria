@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import MovsApp from "@/components/MovsApp";
+import Dashboard from "@/components/Dashboard";
 
 export default function Home() {
   const router = useRouter();
@@ -31,5 +31,5 @@ export default function Home() {
     );
   }
 
-  return <MovsApp email={email ?? ""} />;
+  return <Dashboard email={email ?? ""} />;
 }

@@ -27,6 +27,24 @@ export type Mov = {
   tc?: number;
   msiPart?: { plan: string; monto: number };
   _created?: string; // created_at, solo para ordenar
+  // Solo en movimientos generados desde un plan MSI (no se guardan en BD):
+  gen?: "cuota" | "capital";
+  plan?: string;
+  pj?: number;
+};
+
+export type Pago = { fecha: string; monto: number; tipo: "cuota" | "capital" };
+
+export type Plan = {
+  id: string;
+  concepto: string;
+  cat: string;
+  total: number;
+  meses: number;
+  fecha: string;
+  real: boolean;
+  pagos: Pago[];
+  _created?: string;
 };
 
 export type Rules = {
@@ -105,12 +123,28 @@ export function todayStr() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 export const MES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+export const MESL = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
 export const DOW = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
-const ud = (s: string) => {
+export { pad };
+export const ud = (s: string) => {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d));
 };
-const iso = (d: Date) => d.toISOString().slice(0, 10);
+export const iso = (d: Date) => d.toISOString().slice(0, 10);
+export const addMonths = (s: string, k: number, day: number) => {
+  const d = ud(s);
+  const y = d.getUTCFullYear(),
+    m = d.getUTCMonth() + k;
+  const dim = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return iso(new Date(Date.UTC(y, m, Math.min(day, dim))));
+};
+export const fmtD = (s: string) => {
+  const d = ud(s);
+  return `${d.getUTCDate()} ${MES[d.getUTCMonth()]}`;
+};
 export const addDays = (s: string, n: number) => {
   const d = ud(s);
   d.setUTCDate(d.getUTCDate() + n);

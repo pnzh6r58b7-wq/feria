@@ -1,7 +1,7 @@
 // Capa de datos: lee/escribe en el schema `gastos` de Supabase y mapea
 // entre el modelo en memoria (Mov) y las columnas de la BD.
 import { createClient } from "@/lib/supabase/client";
-import type { Mov, Rules } from "@/lib/model";
+import type { Mov, Plan, Rules } from "@/lib/model";
 
 type Row = {
   id: string;
@@ -99,6 +99,66 @@ export async function deleteMov(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/* ===== PLANES MSI ===== */
+type PlanRow = {
+  id: string;
+  concepto: string;
+  categoria: string;
+  total: number | string;
+  meses: number;
+  fecha: string;
+  cuenta_israel: boolean;
+  pagos: Plan["pagos"] | null;
+  created_at: string;
+};
+function rowToPlan(r: PlanRow): Plan {
+  return {
+    id: r.id,
+    concepto: r.concepto,
+    cat: r.categoria,
+    total: num(r.total) ?? 0,
+    meses: r.meses,
+    fecha: r.fecha,
+    real: r.cuenta_israel,
+    pagos: r.pagos ?? [],
+    _created: r.created_at,
+  };
+}
+function planToRow(p: Plan) {
+  return {
+    concepto: p.concepto,
+    categoria: p.cat,
+    total: p.total,
+    meses: p.meses,
+    fecha: p.fecha,
+    cuenta_israel: p.real,
+    pagos: p.pagos ?? [],
+  };
+}
+export async function fetchPlans(): Promise<Plan[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase.from("planes").select("*").order("fecha", { ascending: false });
+  if (error) throw error;
+  return (data as PlanRow[]).map(rowToPlan);
+}
+export async function insertPlan(p: Plan): Promise<Plan> {
+  const supabase = createClient();
+  const { data, error } = await supabase.from("planes").insert(planToRow(p)).select().single();
+  if (error) throw error;
+  return rowToPlan(data as PlanRow);
+}
+export async function updatePlan(id: string, p: Plan): Promise<Plan> {
+  const supabase = createClient();
+  const { data, error } = await supabase.from("planes").update(planToRow(p)).eq("id", id).select().single();
+  if (error) throw error;
+  return rowToPlan(data as PlanRow);
+}
+export async function deletePlan(id: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.from("planes").delete().eq("id", id);
+  if (error) throw error;
+}
+
 export async function fetchReglas(): Promise<Rules | null> {
   const supabase = createClient();
   const { data, error } = await supabase.from("reglas").select("*").limit(1).maybeSingle();
@@ -113,4 +173,31 @@ export async function fetchReglas(): Promise<Rules | null> {
     pagoDia: Number(r.pago_dia),
     msiMeses: Number(r.msi_meses),
   };
+}
+
+export async function saveReglas(rules: Rules): Promise<void> {
+  const supabase = createClient();
+  const { data: u } = await supabase.auth.getUser();
+  const uid = u.user?.id;
+  if (!uid) throw new Error("sin sesión");
+  const row = {
+    user_id: uid,
+    gas_semana: rules.gasSemana,
+    pct_gastos: rules.pctGastos,
+    pct_emerg: rules.pctEmerg,
+    corte: rules.corte,
+    pago_dia: rules.pagoDia,
+    msi_meses: rules.msiMeses,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await supabase.from("reglas").upsert(row, { onConflict: "user_id" });
+  if (error) throw error;
+}
+
+export async function borrarTodo(): Promise<void> {
+  const supabase = createClient();
+  const { error: e1 } = await supabase.from("movimientos").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+  if (e1) throw e1;
+  const { error: e2 } = await supabase.from("planes").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+  if (e2) throw e2;
 }
